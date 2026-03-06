@@ -73,6 +73,11 @@
           <button id="saveSchemeBtn" type="button">保存当前方案</button>
           <button class="btn2" id="deleteSchemeBtn" type="button">删除选中方案</button>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn2" id="shareSchemeBtn" type="button">生成分享链接</button>
+          <button class="btn2" id="copyShareLinkBtn" type="button">复制分享链接</button>
+        </div>
+        <div class="field" style="margin-top:10px;"><label>分享链接</label><input id="shareLink" readonly placeholder="点击生成分享链接"></div>
         <div class="muted" id="schemeStatus" style="margin-top:8px;">方案保存在当前浏览器本地。</div>
         <div class="muted mobile-only" style="margin-top:8px;">手机端建议：先看“核心结果”，再向下调整参数。</div>
       </div>
@@ -208,6 +213,10 @@ function makeContainerRow(type='1MW', qty=1, unitCost=120000, currency='USD'){
 function getContainers(){ const fxAUD=num('fxRateUSDAUD')||1, fxRMB=num('fxRateUSDRMB')||1; return [...document.querySelectorAll('.containerRow')].map(row=>({ type:row.querySelector('.c-type').value, qty:Number(row.querySelector('.c-qty').value||0), unitCost:Number(row.querySelector('.c-cost').value||0), currency:row.querySelector('.c-currency').value, capacityKW:containerCapacity(row.querySelector('.c-type').value), unitCostUSD:toUSD(Number(row.querySelector('.c-cost').value||0), row.querySelector('.c-currency').value, fxAUD, fxRMB) })); }
 function getSchemePayload(){ return { fields:{ siteInfrastructureCost:$('siteInfrastructureCost').value, infraCurrency:$('infraCurrency').value, displayCurrency:$('displayCurrency').value, electricityPrice:$('electricityPrice').value, electricityCurrency:$('electricityCurrency').value, fxRateUSDAUD:$('fxRateUSDAUD').value, fxRateUSDRMB:$('fxRateUSDRMB').value, minerModel:$('minerModel').value, minerCount:$('minerCount').value, minerPricePerUnit:$('minerPricePerUnit').value, minerPriceCurrency:$('minerPriceCurrency').value, minerHashrateTH:$('minerHashrateTH').value, efficiencyMode:$('efficiencyMode').value, efficiencyValue:$('efficiencyValue').value, btcPrice:$('btcPrice').value, revenueCurrency:$('revenueCurrency').value, hashPrice:$('hashPrice').value, hashPriceCurrency:$('hashPriceCurrency').value, manualBtcPrice:$('manualBtcPrice').checked, manualHashPrice:$('manualHashPrice').checked, revenueMode:$('revenueMode').value, networkHashrateEH:$('networkHashrateEH').value, networkDifficulty:$('networkDifficulty').value, blockReward:$('blockReward').value, avgTxFeePerBlock:$('avgTxFeePerBlock').value, manualNetwork:$('manualNetwork').checked, networkSourceMode:$('networkSourceMode').value }, containers:[...document.querySelectorAll('.containerRow')].map(row=>({type:row.querySelector('.c-type').value,qty:row.querySelector('.c-qty').value,unitCost:row.querySelector('.c-cost').value,currency:row.querySelector('.c-currency').value})) }; }
 function applySchemePayload(payload){ if(!payload) return; Object.entries(payload.fields||{}).forEach(([k,v])=>{ const el=$(k); if(!el) return; if(el.type==='checkbox') el.checked=!!v; else el.value=v; }); $('containerRows').innerHTML=''; (payload.containers||[]).forEach(c=> $('containerRows').appendChild(makeContainerRow(c.type,c.qty,c.unitCost,c.currency))); if((payload.containers||[]).length===0) $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD')); calc(); }
+function encodeSharePayload(payload){ return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }
+function decodeSharePayload(text){ return JSON.parse(decodeURIComponent(escape(atob(text)))); }
+function buildShareLink(){ const url = new URL(window.location.href); url.hash = 'scheme=' + encodeSharePayload(getSchemePayload()); return url.toString(); }
+function applyShareFromUrl(){ const hash = window.location.hash || ''; if(!hash.startsWith('#scheme=')) return false; try { const payload = decodeSharePayload(hash.slice(8)); applySchemePayload(payload); $('shareLink').value = window.location.href; $('schemeStatus').textContent = '已从分享链接加载方案'; return true; } catch(e) { $('schemeStatus').textContent = '分享链接解析失败'; return false; } }
 function getSchemes(){ try { return JSON.parse(localStorage.getItem('miningCalculatorSchemes')||'{}'); } catch { return {}; } }
 function setSchemes(obj){ localStorage.setItem('miningCalculatorSchemes', JSON.stringify(obj)); }
 function refreshSchemeList(){ const sel=$('savedSchemesSelect'); const schemes=getSchemes(); const current=sel.value; sel.innerHTML='<option value="">请选择方案</option>'; Object.keys(schemes).sort().forEach(name=>{ const opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt); }); if(schemes[current]) sel.value=current; }
@@ -316,8 +325,11 @@ $('addContainerBtn').addEventListener('click', ()=>{ $('containerRows').appendCh
 $('saveSchemeBtn').addEventListener('click', ()=>{ const name=$('schemeName').value.trim(); if(!name){ $('schemeStatus').textContent='请先填写方案名称'; return; } const schemes=getSchemes(); schemes[name]={ savedAt:new Date().toISOString(), payload:getSchemePayload() }; setSchemes(schemes); refreshSchemeList(); $('savedSchemesSelect').value=name; $('schemeStatus').textContent=`已保存方案：${name}`; });
 $('loadSchemeBtn').addEventListener('click', ()=>{ const name=$('savedSchemesSelect').value; const schemes=getSchemes(); if(!name || !schemes[name]){ $('schemeStatus').textContent='请选择要读取的方案'; return; } $('schemeName').value=name; applySchemePayload(schemes[name].payload); $('schemeStatus').textContent=`已读取方案：${name}`; });
 $('deleteSchemeBtn').addEventListener('click', ()=>{ const name=$('savedSchemesSelect').value; const schemes=getSchemes(); if(!name || !schemes[name]){ $('schemeStatus').textContent='请选择要删除的方案'; return; } delete schemes[name]; setSchemes(schemes); refreshSchemeList(); $('schemeStatus').textContent=`已删除方案：${name}`; });
+$('shareSchemeBtn').addEventListener('click', ()=>{ const link = buildShareLink(); $('shareLink').value = link; $('schemeStatus').textContent='已生成分享链接'; });
+$('copyShareLinkBtn').addEventListener('click', async ()=>{ const link = $('shareLink').value || buildShareLink(); $('shareLink').value = link; try { await navigator.clipboard.writeText(link); $('schemeStatus').textContent='分享链接已复制'; } catch(e) { $('shareLink').select(); $('schemeStatus').textContent='已生成分享链接，请手动复制'; } });
 $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD'));
 refreshSchemeList();
+applyShareFromUrl();
 calc();
 fetchData();
 </script>
