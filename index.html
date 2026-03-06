@@ -18,7 +18,35 @@
     .check{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}.check input{width:auto}
     details{background:#111a32;border:1px solid #263254;border-radius:12px;padding:12px}summary{cursor:pointer;color:#cfe0ff;font-weight:700}
     ul{margin:8px 0 0 18px;padding:0}.mono{font-family:ui-monospace,SFMono-Regular,monospace}
+    .mobile-only{display:none}
     @media (max-width:900px){.grid,.fields,.kpis,.subgrid,.inline2,.inline3{grid-template-columns:1fr}}
+    @media (max-width:640px){
+      body{font-size:14px}
+      .wrap{padding:12px}
+      .title{align-items:flex-start}
+      .title h1{font-size:22px;line-height:1.2}
+      .card{padding:14px;border-radius:14px}
+      .section{margin-bottom:16px}
+      .section h3{font-size:15px}
+      input,select,button{min-height:44px;font-size:16px;padding:12px 14px}
+      .row{flex-direction:column;align-items:stretch}
+      .row > *{width:100%}
+      .pill{text-align:center}
+      .kpis{grid-template-columns:1fr 1fr;gap:10px}
+      .kpi{padding:12px}
+      .kpi .v{font-size:22px;line-height:1.15;word-break:break-word}
+      td,th{padding:9px 6px;font-size:13px}
+      .right{font-size:13px}
+      .containerRow{padding:12px}
+      .check{font-size:13px}
+      .mobile-only{display:block}
+      .desktop-hint{display:none}
+    }
+    @media (max-width:420px){
+      .kpis{grid-template-columns:1fr}
+      .title h1{font-size:20px}
+      td,th{font-size:12px}
+    }
   </style>
 </head>
 <body>
@@ -46,6 +74,7 @@
           <button class="btn2" id="deleteSchemeBtn" type="button">删除选中方案</button>
         </div>
         <div class="muted" id="schemeStatus" style="margin-top:8px;">方案保存在当前浏览器本地。</div>
+        <div class="muted mobile-only" style="margin-top:8px;">手机端建议：先看“核心结果”，再向下调整参数。</div>
       </div>
     </div>
 
