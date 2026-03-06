@@ -14,10 +14,10 @@
     .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.kpi{background:var(--soft);padding:14px;border-radius:12px}.kpi .v{font-size:26px;font-weight:800;margin-top:6px}.muted{color:var(--muted);font-size:12px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pill{padding:6px 10px;border-radius:999px;background:#1d294b;color:#cfe0ff;font-size:12px}.ok{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}
     table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #233054;text-align:left}.right{text-align:right}
     .subgrid{display:grid;grid-template-columns:1.2fr .8fr .8fr .8fr .4fr;gap:8px;align-items:end}.containerRow{margin-bottom:10px;padding:10px;border:1px solid #263254;border-radius:12px;background:#111a32}
-    .inline2{display:grid;grid-template-columns:1fr 120px;gap:8px}
-    .inline3{display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:center}
-    .check{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
-    .check input{width:auto}
+    .inline2{display:grid;grid-template-columns:1fr 120px;gap:8px}.inline3{display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:center}
+    .check{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}.check input{width:auto}
+    details{background:#111a32;border:1px solid #263254;border-radius:12px;padding:12px}summary{cursor:pointer;color:#cfe0ff;font-weight:700}
+    ul{margin:8px 0 0 18px;padding:0}.mono{font-family:ui-monospace,SFMono-Regular,monospace}
     @media (max-width:900px){.grid,.fields,.kpis,.subgrid,.inline2,.inline3{grid-template-columns:1fr}}
   </style>
 </head>
@@ -26,7 +26,7 @@
     <div class="title">
       <div>
         <h1 style="margin:0 0 8px">比特币挖矿成本收益计算器</h1>
-        <div class="muted">单页 MVP · 矿箱组合 · 多币种输入 · 自动汇率/BTC 价格</div>
+        <div class="muted">版本一 · 网络参数估算 · 矿箱组合 · 多币种输入 · 自动汇率/BTC 价格</div>
       </div>
       <div class="row">
         <span class="pill" id="dataStatus">数据加载中…</span>
@@ -90,9 +90,15 @@
         <div class="section">
           <h3>收入参数</h3>
           <div class="fields">
+            <div class="field"><label>收益模式</label><select id="revenueMode"><option value="NETWORK">网络参数估算</option><option value="HASHPRICE">Hashprice 模式（备用）</option></select></div>
             <div class="field"><label>BTC 当前价格</label><div class="inline3"><input id="btcPrice" type="number" value="90000" step="0.01"><select id="revenueCurrency"><option value="USD">USD</option><option value="AUD">AUD</option><option value="RMB">RMB</option></select><label class="check"><input id="manualBtcPrice" type="checkbox">手动</label></div></div>
+            <div class="field"><label>全网算力 (EH/s)</label><div class="inline3"><input id="networkHashrateEH" type="number" value="700" step="0.01"><select id="networkSourceMode"><option value="HASHRATE">显示全网算力</option><option value="DIFFICULTY">显示难度推导</option></select><label class="check"><input id="manualNetwork" type="checkbox">手动</label></div></div>
+            <div class="field"><label>网络难度 (Difficulty)</label><input id="networkDifficulty" type="number" value="0" step="0.01"></div>
+            <div class="field"><label>区块奖励 (BTC)</label><input id="blockReward" type="number" value="3.125" step="0.0001"></div>
+            <div class="field"><label>平均每区块手续费 (BTC)</label><input id="avgTxFeePerBlock" type="number" value="0.05" step="0.0001"></div>
             <div class="field"><label>Hashprice (货币/TH/day)</label><div class="inline3"><input id="hashPrice" type="number" value="0.055" step="0.0001"><select id="hashPriceCurrency"><option value="USD">USD</option><option value="AUD">AUD</option><option value="RMB">RMB</option></select><label class="check"><input id="manualHashPrice" type="checkbox">手动</label></div></div>
           </div>
+          <div class="muted" id="sourceSummary" style="margin-top:8px">数据来源加载中…</div>
         </div>
       </div>
 
@@ -116,6 +122,7 @@
             <tr><td>单台功耗</td><td class="right" id="powerKWPerMiner"></td></tr>
             <tr><td>总功耗</td><td class="right" id="totalPowerKW"></td></tr>
             <tr><td>每日电耗</td><td class="right" id="dailyEnergyKWh"></td></tr>
+            <tr><td>预计日产 BTC</td><td class="right" id="dailyBTCMined"></td></tr>
             <tr><td>每度电产出收入</td><td class="right" id="grossRevenuePerKWhDay"></td></tr>
             <tr><td>盈亏平衡电价</td><td class="right" id="breakevenElectricityPrice"></td></tr>
             <tr><td>矿机总成本</td><td class="right" id="totalMinerCost"></td></tr>
@@ -130,222 +137,146 @@
           <div id="capacityAlert" class="muted"></div>
           <div class="muted" style="margin-top:8px">注：金额结果统一按“展示币种”输出；收入、电费、矿机/矿箱、基础设施成本都可分别使用各自币种输入。</div>
         </div>
+
+        <div class="section">
+          <details open>
+            <summary>估算依据说明</summary>
+            <ul>
+              <li>本工具当前为 <b>实时参数静态估算模型</b>。</li>
+              <li>自动拉取：BTC 市场价格、USD/AUD 汇率、USD/RMB 汇率。</li>
+              <li>收益模式默认使用 <b>网络参数估算</b>：按当前全网算力 / 难度、区块奖励、平均手续费推导日产 BTC。</li>
+              <li>核心公式：<span class="mono">矿机算力占比 = 自身总算力 / 全网总算力</span>；<span class="mono">日产 BTC = 144 × (区块奖励 + 平均手续费) × 算力占比</span>。</li>
+              <li>日毛收入 = 日产 BTC × BTC 价格；日净收益 = 日毛收入 - 电费。</li>
+              <li>静态回本周期按当前价格、当前电价、当前网络参数估算，不代表未来实际收益。</li>
+              <li>未动态纳入：BTC 价格波动、难度变化、矿池费、停机率、运维费、设备衰减。</li>
+            </ul>
+          </details>
+        </div>
       </div>
     </div>
   </div>
 <script>
 const $ = id => document.getElementById(id);
 const num = id => Number($(id).value || 0);
-function fmt(n,c){
-  const map = {USD:'USD',AUD:'AUD',RMB:'CNY'};
-  return new Intl.NumberFormat('en-US',{style:'currency',currency:map[c]||c,maximumFractionDigits:2}).format(n||0);
-}
-const ids = ['siteInfrastructureCost','infraCurrency','displayCurrency','electricityPrice','electricityCurrency','fxRateUSDAUD','fxRateUSDRMB','minerModel','minerCount','minerPricePerUnit','minerPriceCurrency','minerHashrateTH','efficiencyMode','efficiencyValue','btcPrice','revenueCurrency','hashPrice','hashPriceCurrency','manualBtcPrice','manualHashPrice'];
-
-function toUSD(value, currency, fxAUD, fxRMB){
-  if(currency === 'AUD') return value / fxAUD;
-  if(currency === 'RMB') return value / fxRMB;
-  return value;
-}
-function fromUSD(value, currency, fxAUD, fxRMB){
-  if(currency === 'AUD') return value * fxAUD;
-  if(currency === 'RMB') return value * fxRMB;
-  return value;
-}
-function containerCapacity(type){ return type === '2.4MW' ? 2400 : 1000; }
+const dataMeta = { updatedAt: '-', fx: '-', btc: '-', network: '-' };
+function fmt(n,c){ const map={USD:'USD',AUD:'AUD',RMB:'CNY'}; return new Intl.NumberFormat('en-US',{style:'currency',currency:map[c]||c,maximumFractionDigits:2}).format(n||0); }
+const ids = ['siteInfrastructureCost','infraCurrency','displayCurrency','electricityPrice','electricityCurrency','fxRateUSDAUD','fxRateUSDRMB','minerModel','minerCount','minerPricePerUnit','minerPriceCurrency','minerHashrateTH','efficiencyMode','efficiencyValue','btcPrice','revenueCurrency','hashPrice','hashPriceCurrency','manualBtcPrice','manualHashPrice','revenueMode','networkHashrateEH','networkDifficulty','blockReward','avgTxFeePerBlock','manualNetwork','networkSourceMode'];
+function toUSD(value, currency, fxAUD, fxRMB){ if(currency==='AUD') return value/fxAUD; if(currency==='RMB') return value/fxRMB; return value; }
+function fromUSD(value, currency, fxAUD, fxRMB){ if(currency==='AUD') return value*fxAUD; if(currency==='RMB') return value*fxRMB; return value; }
+function containerCapacity(type){ return type==='2.4MW' ? 2400 : 1000; }
+function difficultyToEHs(difficulty){ return difficulty>0 ? difficulty * Math.pow(2,32) / 600 / 1e18 : 0; }
+function nowStamp(){ return new Date().toLocaleString('zh-CN',{hour12:false}); }
+function updateSourceSummary(){ $('sourceSummary').textContent = `数据更新时间：价格 ${dataMeta.btc || '-'} ｜ 汇率 ${dataMeta.fx || '-'} ｜ 网络 ${dataMeta.network || '-'} ｜ 当前模式：${$('revenueMode').value === 'NETWORK' ? '网络参数估算' : 'Hashprice 备用模式'}`; }
 
 function makeContainerRow(type='1MW', qty=1, unitCost=120000, currency='USD'){
-  const div = document.createElement('div');
-  div.className = 'containerRow';
-  div.innerHTML = `
-    <div class="subgrid">
-      <div class="field"><label>矿箱规格</label><select class="c-type"><option value="1MW">1MW</option><option value="2.4MW">2.4MW</option></select></div>
-      <div class="field"><label>数量</label><input class="c-qty" type="number" min="0" step="1" value="${qty}"></div>
-      <div class="field"><label>单个成本</label><input class="c-cost" type="number" min="0" step="0.01" value="${unitCost}"></div>
-      <div class="field"><label>币种</label><select class="c-currency"><option value="USD">USD</option><option value="AUD">AUD</option><option value="RMB">RMB</option></select></div>
-      <div class="field"><label>&nbsp;</label><button type="button" class="btn2 c-remove">删</button></div>
-    </div>`;
-  div.querySelector('.c-type').value = type;
-  div.querySelector('.c-currency').value = currency;
+  const div=document.createElement('div'); div.className='containerRow';
+  div.innerHTML=`<div class="subgrid"><div class="field"><label>矿箱规格</label><select class="c-type"><option value="1MW">1MW</option><option value="2.4MW">2.4MW</option></select></div><div class="field"><label>数量</label><input class="c-qty" type="number" min="0" step="1" value="${qty}"></div><div class="field"><label>单个成本</label><input class="c-cost" type="number" min="0" step="0.01" value="${unitCost}"></div><div class="field"><label>币种</label><select class="c-currency"><option value="USD">USD</option><option value="AUD">AUD</option><option value="RMB">RMB</option></select></div><div class="field"><label>&nbsp;</label><button type="button" class="btn2 c-remove">删</button></div></div>`;
+  div.querySelector('.c-type').value=type; div.querySelector('.c-currency').value=currency;
   div.querySelectorAll('input,select').forEach(el=>el.addEventListener('input', calc));
   div.querySelector('.c-remove').addEventListener('click', ()=>{div.remove(); calc();});
   return div;
 }
-
-function getContainers(){
-  const fxAUD = num('fxRateUSDAUD') || 1;
-  const fxRMB = num('fxRateUSDRMB') || 1;
-  return [...document.querySelectorAll('.containerRow')].map(row=>({
-    type: row.querySelector('.c-type').value,
-    qty: Number(row.querySelector('.c-qty').value || 0),
-    unitCost: Number(row.querySelector('.c-cost').value || 0),
-    currency: row.querySelector('.c-currency').value,
-    capacityKW: containerCapacity(row.querySelector('.c-type').value),
-    unitCostUSD: toUSD(Number(row.querySelector('.c-cost').value || 0), row.querySelector('.c-currency').value, fxAUD, fxRMB)
-  }));
-}
-
-function getSchemePayload(){
-  return {
-    fields: {
-      siteInfrastructureCost: $('siteInfrastructureCost').value,
-      infraCurrency: $('infraCurrency').value,
-      displayCurrency: $('displayCurrency').value,
-      electricityPrice: $('electricityPrice').value,
-      electricityCurrency: $('electricityCurrency').value,
-      fxRateUSDAUD: $('fxRateUSDAUD').value,
-      fxRateUSDRMB: $('fxRateUSDRMB').value,
-      minerModel: $('minerModel').value,
-      minerCount: $('minerCount').value,
-      minerPricePerUnit: $('minerPricePerUnit').value,
-      minerPriceCurrency: $('minerPriceCurrency').value,
-      minerHashrateTH: $('minerHashrateTH').value,
-      efficiencyMode: $('efficiencyMode').value,
-      efficiencyValue: $('efficiencyValue').value,
-      btcPrice: $('btcPrice').value,
-      revenueCurrency: $('revenueCurrency').value,
-      hashPrice: $('hashPrice').value,
-      hashPriceCurrency: $('hashPriceCurrency').value,
-      manualBtcPrice: $('manualBtcPrice').checked,
-      manualHashPrice: $('manualHashPrice').checked
-    },
-    containers: [...document.querySelectorAll('.containerRow')].map(row => ({
-      type: row.querySelector('.c-type').value,
-      qty: row.querySelector('.c-qty').value,
-      unitCost: row.querySelector('.c-cost').value,
-      currency: row.querySelector('.c-currency').value
-    }))
-  };
-}
-
-function applySchemePayload(payload){
-  if(!payload) return;
-  Object.entries(payload.fields || {}).forEach(([k,v]) => {
-    const el = $(k);
-    if(!el) return;
-    if(el.type === 'checkbox') el.checked = !!v;
-    else el.value = v;
-  });
-  $('containerRows').innerHTML = '';
-  (payload.containers || []).forEach(c => {
-    $('containerRows').appendChild(makeContainerRow(c.type, c.qty, c.unitCost, c.currency));
-  });
-  if((payload.containers || []).length === 0){
-    $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD'));
-  }
-  calc();
-}
-
-function getSchemes(){
-  try { return JSON.parse(localStorage.getItem('miningCalculatorSchemes') || '{}'); }
-  catch { return {}; }
-}
+function getContainers(){ const fxAUD=num('fxRateUSDAUD')||1, fxRMB=num('fxRateUSDRMB')||1; return [...document.querySelectorAll('.containerRow')].map(row=>({ type:row.querySelector('.c-type').value, qty:Number(row.querySelector('.c-qty').value||0), unitCost:Number(row.querySelector('.c-cost').value||0), currency:row.querySelector('.c-currency').value, capacityKW:containerCapacity(row.querySelector('.c-type').value), unitCostUSD:toUSD(Number(row.querySelector('.c-cost').value||0), row.querySelector('.c-currency').value, fxAUD, fxRMB) })); }
+function getSchemePayload(){ return { fields:{ siteInfrastructureCost:$('siteInfrastructureCost').value, infraCurrency:$('infraCurrency').value, displayCurrency:$('displayCurrency').value, electricityPrice:$('electricityPrice').value, electricityCurrency:$('electricityCurrency').value, fxRateUSDAUD:$('fxRateUSDAUD').value, fxRateUSDRMB:$('fxRateUSDRMB').value, minerModel:$('minerModel').value, minerCount:$('minerCount').value, minerPricePerUnit:$('minerPricePerUnit').value, minerPriceCurrency:$('minerPriceCurrency').value, minerHashrateTH:$('minerHashrateTH').value, efficiencyMode:$('efficiencyMode').value, efficiencyValue:$('efficiencyValue').value, btcPrice:$('btcPrice').value, revenueCurrency:$('revenueCurrency').value, hashPrice:$('hashPrice').value, hashPriceCurrency:$('hashPriceCurrency').value, manualBtcPrice:$('manualBtcPrice').checked, manualHashPrice:$('manualHashPrice').checked, revenueMode:$('revenueMode').value, networkHashrateEH:$('networkHashrateEH').value, networkDifficulty:$('networkDifficulty').value, blockReward:$('blockReward').value, avgTxFeePerBlock:$('avgTxFeePerBlock').value, manualNetwork:$('manualNetwork').checked, networkSourceMode:$('networkSourceMode').value }, containers:[...document.querySelectorAll('.containerRow')].map(row=>({type:row.querySelector('.c-type').value,qty:row.querySelector('.c-qty').value,unitCost:row.querySelector('.c-cost').value,currency:row.querySelector('.c-currency').value})) }; }
+function applySchemePayload(payload){ if(!payload) return; Object.entries(payload.fields||{}).forEach(([k,v])=>{ const el=$(k); if(!el) return; if(el.type==='checkbox') el.checked=!!v; else el.value=v; }); $('containerRows').innerHTML=''; (payload.containers||[]).forEach(c=> $('containerRows').appendChild(makeContainerRow(c.type,c.qty,c.unitCost,c.currency))); if((payload.containers||[]).length===0) $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD')); calc(); }
+function getSchemes(){ try { return JSON.parse(localStorage.getItem('miningCalculatorSchemes')||'{}'); } catch { return {}; } }
 function setSchemes(obj){ localStorage.setItem('miningCalculatorSchemes', JSON.stringify(obj)); }
-function refreshSchemeList(){
-  const sel = $('savedSchemesSelect');
-  const schemes = getSchemes();
-  const current = sel.value;
-  sel.innerHTML = '<option value="">请选择方案</option>';
-  Object.keys(schemes).sort().forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name; opt.textContent = name; sel.appendChild(opt);
-  });
-  if(schemes[current]) sel.value = current;
-}
+function refreshSchemeList(){ const sel=$('savedSchemesSelect'); const schemes=getSchemes(); const current=sel.value; sel.innerHTML='<option value="">请选择方案</option>'; Object.keys(schemes).sort().forEach(name=>{ const opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt); }); if(schemes[current]) sel.value=current; }
 
 async function fetchData(){
   $('dataStatus').textContent='正在刷新…';
   try{
-    const [fxAudRes, fxRmbRes, btcRes] = await Promise.all([
+    const [fxAudRes, fxRmbRes, btcRes, mempoolDiffRes, blockHeightRes] = await Promise.all([
       fetch('https://api.frankfurter.app/latest?from=USD&to=AUD').then(r=>r.json()).catch(()=>null),
       fetch('https://api.frankfurter.app/latest?from=USD&to=CNY').then(r=>r.json()).catch(()=>null),
-      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(r=>r.json()).catch(()=>null)
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(r=>r.json()).catch(()=>null),
+      fetch('https://mempool.space/api/v1/difficulty-adjustment').then(r=>r.json()).catch(()=>null),
+      fetch('https://mempool.space/api/blocks/tip/height').then(r=>r.text()).catch(()=>null)
     ]);
     if(fxAudRes?.rates?.AUD) $('fxRateUSDAUD').value = fxAudRes.rates.AUD;
     if(fxRmbRes?.rates?.CNY) $('fxRateUSDRMB').value = fxRmbRes.rates.CNY;
-    const fxAUD = num('fxRateUSDAUD') || 1;
-    const fxRMB = num('fxRateUSDRMB') || 1;
+    dataMeta.fx = nowStamp();
+    const fxAUD=num('fxRateUSDAUD')||1, fxRMB=num('fxRateUSDRMB')||1;
     if(btcRes?.bitcoin?.usd){
-      const usd = btcRes.bitcoin.usd;
-      if(!$('manualBtcPrice').checked){
-        $('btcPrice').value = fromUSD(usd, $('revenueCurrency').value, fxAUD, fxRMB).toFixed(2);
+      const usd=btcRes.bitcoin.usd;
+      if(!$('manualBtcPrice').checked) $('btcPrice').value = fromUSD(usd, $('revenueCurrency').value, fxAUD, fxRMB).toFixed(2);
+      if(!$('manualHashPrice').checked){ const usdHashPrice = usd * 0.00000061; $('hashPrice').value = fromUSD(usdHashPrice, $('hashPriceCurrency').value, fxAUD, fxRMB).toFixed(4); }
+      dataMeta.btc = nowStamp();
+    }
+    if(!$('manualNetwork').checked){
+      if(mempoolDiffRes){
+        const diff = Number(mempoolDiffRes.currentDifficulty || 0);
+        if(diff > 0) $('networkDifficulty').value = diff.toFixed(0);
+        const ehs = difficultyToEHs(diff);
+        if(ehs > 0) $('networkHashrateEH').value = ehs.toFixed(2);
       }
-      if(!$('manualHashPrice').checked){
-        const usdHashPrice = usd * 0.00000061;
-        $('hashPrice').value = fromUSD(usdHashPrice, $('hashPriceCurrency').value, fxAUD, fxRMB).toFixed(4);
-      }
+      dataMeta.network = nowStamp() + (blockHeightRes ? ` @高度 ${String(blockHeightRes).trim()}` : '');
     }
     $('dataStatus').textContent='实时数据已更新';
   }catch(e){ $('dataStatus').textContent='实时数据获取失败，使用手动值'; }
+  updateSourceSummary();
   calc();
 }
 
 function calc(){
-  const fxAUD = num('fxRateUSDAUD') || 1;
-  const fxRMB = num('fxRateUSDRMB') || 1;
-  const displayCurrency = $('displayCurrency').value;
-  const revenueCurrency = $('revenueCurrency').value;
-  const hashPriceCurrency = $('hashPriceCurrency').value;
-  const electricityCurrency = $('electricityCurrency').value;
-  const minerPriceCurrency = $('minerPriceCurrency').value;
-  const infraCurrency = $('infraCurrency').value;
-  const containers = getContainers();
+  const fxAUD=num('fxRateUSDAUD')||1, fxRMB=num('fxRateUSDRMB')||1;
+  const displayCurrency=$('displayCurrency').value, hashPriceCurrency=$('hashPriceCurrency').value, electricityCurrency=$('electricityCurrency').value, minerPriceCurrency=$('minerPriceCurrency').value, infraCurrency=$('infraCurrency').value;
+  const containers=getContainers();
+  const totalContainerCostUSD=containers.reduce((s,c)=>s+c.qty*c.unitCostUSD,0);
+  const containerCapacityKW=containers.reduce((s,c)=>s+c.qty*c.capacityKW,0);
+  const minerCount=num('minerCount'), minerHashrateTH=num('minerHashrateTH'), efficiencyValue=num('efficiencyValue');
+  const powerKWPerMiner = $('efficiencyMode').value==='J_PER_TH' ? minerHashrateTH*efficiencyValue/1000 : minerHashrateTH/efficiencyValue;
+  const totalHashrateTH=minerCount*minerHashrateTH, totalPowerKW=minerCount*powerKWPerMiner, dailyEnergyKWh=totalPowerKW*24;
+  const dailyElectricityCostUSD=toUSD(dailyEnergyKWh*num('electricityPrice'), electricityCurrency, fxAUD, fxRMB);
 
-  const totalContainerCostUSD = containers.reduce((s,c)=>s + c.qty * c.unitCostUSD, 0);
-  const containerCapacityKW = containers.reduce((s,c)=>s + c.qty * c.capacityKW, 0);
+  let dailyBTCMined = 0;
+  let dailyGrossRevenueUSD = 0;
+  if($('revenueMode').value === 'NETWORK'){
+    let networkEH = num('networkHashrateEH');
+    const diff = num('networkDifficulty');
+    if($('networkSourceMode').value === 'DIFFICULTY' && diff > 0) networkEH = difficultyToEHs(diff);
+    const networkTH = networkEH * 1e6;
+    const dailyBTCNetwork = 144 * (num('blockReward') + num('avgTxFeePerBlock'));
+    dailyBTCMined = networkTH > 0 ? (totalHashrateTH / networkTH) * dailyBTCNetwork : 0;
+    const btcPriceUSD = toUSD(num('btcPrice'), $('revenueCurrency').value, fxAUD, fxRMB);
+    dailyGrossRevenueUSD = dailyBTCMined * btcPriceUSD;
+  } else {
+    dailyGrossRevenueUSD = toUSD(totalHashrateTH * num('hashPrice'), hashPriceCurrency, fxAUD, fxRMB);
+    const btcPriceUSD = toUSD(num('btcPrice'), $('revenueCurrency').value, fxAUD, fxRMB);
+    dailyBTCMined = btcPriceUSD > 0 ? (dailyGrossRevenueUSD / btcPriceUSD) : 0;
+  }
 
-  const minerCount = num('minerCount');
-  const minerHashrateTH = num('minerHashrateTH');
-  const efficiencyValue = num('efficiencyValue');
-  const powerKWPerMiner = $('efficiencyMode').value === 'J_PER_TH' ? minerHashrateTH * efficiencyValue / 1000 : minerHashrateTH / efficiencyValue;
-  const totalHashrateTH = minerCount * minerHashrateTH;
-  const totalPowerKW = minerCount * powerKWPerMiner;
-  const dailyEnergyKWh = totalPowerKW * 24;
+  const dailyNetProfitUSD=dailyGrossRevenueUSD-dailyElectricityCostUSD;
+  const breakevenElectricityPriceUSD=dailyEnergyKWh>0 ? (dailyGrossRevenueUSD/dailyEnergyKWh) : null;
+  const grossRevenuePerKWhDayUSD=dailyEnergyKWh>0 ? (dailyGrossRevenueUSD/dailyEnergyKWh) : null;
+  const totalMinerCostUSD=toUSD(minerCount*num('minerPricePerUnit'), minerPriceCurrency, fxAUD, fxRMB);
+  const infraUSD=toUSD(num('siteInfrastructureCost'), infraCurrency, fxAUD, fxRMB);
+  const totalFixedCostUSD=totalContainerCostUSD+infraUSD+totalMinerCostUSD;
+  const paybackDays=dailyNetProfitUSD>0 ? totalFixedCostUSD/dailyNetProfitUSD : null;
+  const paybackMonths=paybackDays ? paybackDays/30 : null;
+  const loadFactor=containerCapacityKW>0 ? totalPowerKW/containerCapacityKW : 0;
+  const maxMinerCount=powerKWPerMiner>0 && containerCapacityKW>0 ? Math.floor(containerCapacityKW/powerKWPerMiner) : 0;
+  const isOverCapacity=totalPowerKW>containerCapacityKW && containerCapacityKW>0;
 
-  const dailyElectricityCostUSD = toUSD(dailyEnergyKWh * num('electricityPrice'), electricityCurrency, fxAUD, fxRMB);
-  const dailyGrossRevenueUSD = toUSD(totalHashrateTH * num('hashPrice'), hashPriceCurrency, fxAUD, fxRMB);
-  const dailyNetProfitUSD = dailyGrossRevenueUSD - dailyElectricityCostUSD;
-  const breakevenElectricityPriceUSD = dailyEnergyKWh > 0 ? (dailyGrossRevenueUSD / dailyEnergyKWh) : null;
-  const grossRevenuePerKWhDayUSD = dailyEnergyKWh > 0 ? (dailyGrossRevenueUSD / dailyEnergyKWh) : null;
-
-  const totalMinerCostUSD = toUSD(minerCount * num('minerPricePerUnit'), minerPriceCurrency, fxAUD, fxRMB);
-  const infraUSD = toUSD(num('siteInfrastructureCost'), infraCurrency, fxAUD, fxRMB);
-  const totalFixedCostUSD = totalContainerCostUSD + infraUSD + totalMinerCostUSD;
-
-  const paybackDays = dailyNetProfitUSD > 0 ? totalFixedCostUSD / dailyNetProfitUSD : null;
-  const paybackMonths = paybackDays ? paybackDays / 30 : null;
-  const loadFactor = containerCapacityKW > 0 ? totalPowerKW / containerCapacityKW : 0;
-  const maxMinerCount = powerKWPerMiner > 0 && containerCapacityKW > 0 ? Math.floor(containerCapacityKW / powerKWPerMiner) : 0;
-  const isOverCapacity = totalPowerKW > containerCapacityKW && containerCapacityKW > 0;
-
-  $('dailyGrossRevenue').textContent = fmt(fromUSD(dailyGrossRevenueUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('dailyElectricityCost').textContent = fmt(fromUSD(dailyElectricityCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('dailyNetProfit').textContent = fmt(fromUSD(dailyNetProfitUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('paybackMonths').textContent = paybackMonths ? paybackMonths.toFixed(1)+' 月' : '无法回本';
-
-  $('containerCapacityKW').textContent = containerCapacityKW.toFixed(0)+' kW';
-  $('totalContainerCost').textContent = fmt(fromUSD(totalContainerCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('totalHashrateTH').textContent = totalHashrateTH.toFixed(2)+' TH/s';
-  $('powerKWPerMiner').textContent = powerKWPerMiner.toFixed(2)+' kW';
-  $('totalPowerKW').textContent = totalPowerKW.toFixed(2)+' kW';
-  $('dailyEnergyKWh').textContent = dailyEnergyKWh.toFixed(2)+' kWh/day';
-  $('grossRevenuePerKWhDay').textContent = grossRevenuePerKWhDayUSD !== null
-    ? `${fmt(fromUSD(grossRevenuePerKWhDayUSD, displayCurrency, fxAUD, fxRMB), displayCurrency)}/kWh`
-    : '-';
-  $('breakevenElectricityPrice').textContent = breakevenElectricityPriceUSD !== null
-    ? `${fmt(fromUSD(breakevenElectricityPriceUSD, displayCurrency, fxAUD, fxRMB), displayCurrency)}/kWh`
-    : '-';
-  $('totalMinerCost').textContent = fmt(fromUSD(totalMinerCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('totalFixedCost').textContent = fmt(fromUSD(totalFixedCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
-  $('loadFactor').textContent = containerCapacityKW ? (loadFactor*100).toFixed(1)+'%' : '-';
-  $('maxMinerCount').textContent = maxMinerCount + ' 台';
-  $('capacityAlert').innerHTML = containerCapacityKW === 0
-    ? '<span class="warn">请先添加矿箱组合</span>'
-    : isOverCapacity
-      ? '<span class="bad">超载：当前矿机总功耗超过矿箱组合总容量</span>'
-      : loadFactor > 0.9
-        ? '<span class="warn">接近上限：装载率超过 90%</span>'
-        : '<span class="ok">容量正常</span>';
+  $('dailyGrossRevenue').textContent=fmt(fromUSD(dailyGrossRevenueUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('dailyElectricityCost').textContent=fmt(fromUSD(dailyElectricityCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('dailyNetProfit').textContent=fmt(fromUSD(dailyNetProfitUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('paybackMonths').textContent=paybackMonths ? paybackMonths.toFixed(1)+' 月' : '无法回本';
+  $('containerCapacityKW').textContent=containerCapacityKW.toFixed(0)+' kW';
+  $('totalContainerCost').textContent=fmt(fromUSD(totalContainerCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('totalHashrateTH').textContent=totalHashrateTH.toFixed(2)+' TH/s';
+  $('powerKWPerMiner').textContent=powerKWPerMiner.toFixed(2)+' kW';
+  $('totalPowerKW').textContent=totalPowerKW.toFixed(2)+' kW';
+  $('dailyEnergyKWh').textContent=dailyEnergyKWh.toFixed(2)+' kWh/day';
+  $('dailyBTCMined').textContent=dailyBTCMined.toFixed(8)+' BTC/day';
+  $('grossRevenuePerKWhDay').textContent=grossRevenuePerKWhDayUSD!==null ? `${fmt(fromUSD(grossRevenuePerKWhDayUSD, displayCurrency, fxAUD, fxRMB), displayCurrency)}/kWh` : '-';
+  $('breakevenElectricityPrice').textContent=breakevenElectricityPriceUSD!==null ? `${fmt(fromUSD(breakevenElectricityPriceUSD, displayCurrency, fxAUD, fxRMB), displayCurrency)}/kWh` : '-';
+  $('totalMinerCost').textContent=fmt(fromUSD(totalMinerCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('totalFixedCost').textContent=fmt(fromUSD(totalFixedCostUSD, displayCurrency, fxAUD, fxRMB), displayCurrency);
+  $('loadFactor').textContent=containerCapacityKW ? (loadFactor*100).toFixed(1)+'%' : '-';
+  $('maxMinerCount').textContent=maxMinerCount+' 台';
+  $('capacityAlert').innerHTML = containerCapacityKW===0 ? '<span class="warn">请先添加矿箱组合</span>' : isOverCapacity ? '<span class="bad">超载：当前矿机总功耗超过矿箱组合总容量</span>' : loadFactor>0.9 ? '<span class="warn">接近上限：装载率超过 90%</span>' : '<span class="ok">容量正常</span>';
+  updateSourceSummary();
 }
 
 ids.forEach(id => $(id).addEventListener('input', calc));
@@ -353,33 +284,9 @@ $('refreshBtn').addEventListener('click', fetchData);
 $('revenueCurrency').addEventListener('change', fetchData);
 $('hashPriceCurrency').addEventListener('change', fetchData);
 $('addContainerBtn').addEventListener('click', ()=>{ $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD')); calc(); });
-$('saveSchemeBtn').addEventListener('click', () => {
-  const name = $('schemeName').value.trim();
-  if(!name){ $('schemeStatus').textContent = '请先填写方案名称'; return; }
-  const schemes = getSchemes();
-  schemes[name] = { savedAt: new Date().toISOString(), payload: getSchemePayload() };
-  setSchemes(schemes);
-  refreshSchemeList();
-  $('savedSchemesSelect').value = name;
-  $('schemeStatus').textContent = `已保存方案：${name}`;
-});
-$('loadSchemeBtn').addEventListener('click', () => {
-  const name = $('savedSchemesSelect').value;
-  const schemes = getSchemes();
-  if(!name || !schemes[name]){ $('schemeStatus').textContent = '请选择要读取的方案'; return; }
-  $('schemeName').value = name;
-  applySchemePayload(schemes[name].payload);
-  $('schemeStatus').textContent = `已读取方案：${name}`;
-});
-$('deleteSchemeBtn').addEventListener('click', () => {
-  const name = $('savedSchemesSelect').value;
-  const schemes = getSchemes();
-  if(!name || !schemes[name]){ $('schemeStatus').textContent = '请选择要删除的方案'; return; }
-  delete schemes[name];
-  setSchemes(schemes);
-  refreshSchemeList();
-  $('schemeStatus').textContent = `已删除方案：${name}`;
-});
+$('saveSchemeBtn').addEventListener('click', ()=>{ const name=$('schemeName').value.trim(); if(!name){ $('schemeStatus').textContent='请先填写方案名称'; return; } const schemes=getSchemes(); schemes[name]={ savedAt:new Date().toISOString(), payload:getSchemePayload() }; setSchemes(schemes); refreshSchemeList(); $('savedSchemesSelect').value=name; $('schemeStatus').textContent=`已保存方案：${name}`; });
+$('loadSchemeBtn').addEventListener('click', ()=>{ const name=$('savedSchemesSelect').value; const schemes=getSchemes(); if(!name || !schemes[name]){ $('schemeStatus').textContent='请选择要读取的方案'; return; } $('schemeName').value=name; applySchemePayload(schemes[name].payload); $('schemeStatus').textContent=`已读取方案：${name}`; });
+$('deleteSchemeBtn').addEventListener('click', ()=>{ const name=$('savedSchemesSelect').value; const schemes=getSchemes(); if(!name || !schemes[name]){ $('schemeStatus').textContent='请选择要删除的方案'; return; } delete schemes[name]; setSchemes(schemes); refreshSchemeList(); $('schemeStatus').textContent=`已删除方案：${name}`; });
 $('containerRows').appendChild(makeContainerRow('1MW',1,120000,'USD'));
 refreshSchemeList();
 calc();
